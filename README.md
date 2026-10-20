@@ -16,7 +16,7 @@ The vendor background service (`GCUService.exe`, started by the `GCUBridge` Wind
 
 ## Features
 
-- On/off, brightness 1-4, any color (on RGB keyboards), with 9 one-click presets.
+- On/off, brightness 1-4 (hardware steps), fine **Intensity** 5-100% on RGB keyboards (scales the LED color levels), any color (on RGB keyboards), with 9 one-click presets.
 - **Keep my setting:** checks the keyboard every N seconds (default 2) and re-applies your setting if anything changed it. It also re-applies right after wake from sleep and after plugging in or unplugging.
 - **Optional battery rule (off by default):** on battery, either turn the light off or dim it to a level you pick. You can limit it to "only when charge is at or below X%".
 - **Start with Windows:** a Task Scheduler logon task with highest privileges, so there is no UAC prompt at logon. The task is set to start and keep running on battery, which Windows does not do by default.

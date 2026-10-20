@@ -49,6 +49,8 @@ namespace KeyLight
         // mapped straight to 0-50. level = 50 * (channel/255)^Gamma * Trim/100
         public double Gamma = 2.2;
         public int TrimRed = 60, TrimGreen = 60, TrimBlue = 100;
+        // fine intensity on top of the 4 hardware brightness steps, by scaling the color levels
+        public int IntensityPercent = 100;
 
         public Keyboard(Ec ec)
         {
@@ -76,7 +78,7 @@ namespace KeyLight
             double fb = Math.Pow(c.B / 255.0, Gamma) * TrimBlue / 100.0;
             double peak = Math.Max(fr, Math.Max(fg, fb));
             double want = Math.Pow(Math.Max(c.R, Math.Max(c.G, c.B)) / 255.0, Gamma);
-            double scale = peak > 0 ? MaxColorLevel * want / peak : 0;
+            double scale = peak > 0 ? MaxColorLevel * want / peak * IntensityPercent / 100.0 : 0;
             r = ToByte(fr * scale);
             g = ToByte(fg * scale);
             b = ToByte(fb * scale);

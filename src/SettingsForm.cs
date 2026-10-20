@@ -12,6 +12,8 @@ namespace KeyLight
         readonly CheckBox chkOn = new CheckBox { Text = "Backlight on", AutoSize = true };
         readonly TrackBar trkBright = new TrackBar { Minimum = 1, Maximum = Keyboard.MaxBrightness, Width = 220, TickStyle = TickStyle.BottomRight };
         readonly Label lblBright = new Label { AutoSize = true };
+        readonly TrackBar trkIntensity = new TrackBar { Minimum = 5, Maximum = 100, TickFrequency = 5, SmallChange = 1, LargeChange = 5, Width = 220 };
+        readonly Label lblIntensity = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
         readonly Panel swatch = new Panel { Width = 60, Height = 26, BorderStyle = BorderStyle.FixedSingle };
         readonly Button btnColor = new Button { Text = "Pick color...", AutoSize = true };
         readonly CheckBox chkEnforce = new CheckBox { Text = "Keep my setting (re-apply if anything changes it)", AutoSize = true };
@@ -60,7 +62,9 @@ namespace KeyLight
             // Light
             var gLight = Group("Keyboard light");
             gLight.Controls.Add(chkOn);
-            gLight.Controls.Add(Row(new Label { Text = "Brightness", AutoSize = true, Margin = new Padding(0, 8, 0, 0) }, trkBright, lblBright));
+            gLight.Controls.Add(Row(Fixed("Brightness", 75), trkBright, lblBright));
+            gLight.Controls.Add(Row(Fixed("Intensity", 75), trkIntensity, lblIntensity));
+            if (!app.Kb.IsRgb) trkIntensity.Enabled = false;
             var presets = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
             foreach (Color c in Presets)
             {
@@ -131,6 +135,7 @@ namespace KeyLight
             EventHandler changed = delegate { OnChanged(); };
             chkOn.CheckedChanged += changed;
             trkBright.ValueChanged += changed;
+            trkIntensity.ValueChanged += changed;
             chkEnforce.CheckedChanged += changed;
             numInterval.ValueChanged += changed;
             chkBatt.CheckedChanged += changed;
@@ -200,6 +205,8 @@ namespace KeyLight
             chkFixVendor.Checked = c.FixVendorSettings;
             chkStopVendor.Checked = c.StopVendorService;
             chkAutostart.Checked = Autostart.IsEnabled();
+            trkIntensity.Value = c.IntensityPercent;
+            lblIntensity.Text = c.IntensityPercent + "%";
             trkRed.Value = c.TrimRed;
             trkGreen.Value = c.TrimGreen;
             trkBlue.Value = c.TrimBlue;
@@ -243,6 +250,8 @@ namespace KeyLight
             c.TrimGreen = trkGreen.Value;
             c.TrimBlue = trkBlue.Value;
             c.Gamma = (double)numGamma.Value;
+            c.IntensityPercent = trkIntensity.Value;
+            lblIntensity.Text = trkIntensity.Value + "%";
             UpdateTrimLabels();
             app.Update(c);
         }

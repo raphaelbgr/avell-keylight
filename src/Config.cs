@@ -38,7 +38,9 @@ namespace KeyLight
         public int TrimGreen = 60;
         public int TrimBlue = 100;
 
-        public bool TrayIconPromoted = false;                // tray icon made always-visible once
+        public int IntensityPercent = 100;                   // 5-100, scales color levels (RGB keyboards)
+
+        public bool TrayIconPromoted = false;               // tray icon made always-visible once
 
         public bool FixVendorSettings = true;                // neutralize Control Center battery-off + idle timer
         public bool StopVendorService = false;               // stop GCUBridge while KeyLight runs
@@ -54,6 +56,7 @@ namespace KeyLight
             kb.TrimRed = TrimRed;
             kb.TrimGreen = TrimGreen;
             kb.TrimBlue = TrimBlue;
+            kb.IntensityPercent = IntensityPercent;
         }
 
         public static Config Load()
@@ -86,6 +89,7 @@ namespace KeyLight
             c.TrimGreen = Clamp(GetInt(kv, "TrimGreen", c.TrimGreen), 5, 100);
             c.TrimBlue = Clamp(GetInt(kv, "TrimBlue", c.TrimBlue), 5, 100);
             c.TrayIconPromoted = GetBool(kv, "TrayIconPromoted", c.TrayIconPromoted);
+            c.IntensityPercent = Clamp(GetInt(kv, "IntensityPercent", c.IntensityPercent), 5, 100);
             return c;
         }
 
@@ -110,6 +114,7 @@ namespace KeyLight
             sb.AppendLine("TrimGreen=" + TrimGreen);
             sb.AppendLine("TrimBlue=" + TrimBlue);
             sb.AppendLine("TrayIconPromoted=" + TrayIconPromoted);
+            sb.AppendLine("IntensityPercent=" + IntensityPercent);
             string tmp = FilePath + ".tmp";
             File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
             if (File.Exists(FilePath)) File.Delete(FilePath);
