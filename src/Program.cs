@@ -22,7 +22,9 @@ namespace KeyLight
   AvellKeyLight.exe autostart on|off     start with Windows
   AvellKeyLight.exe vendor fix|restore   neutralize / restore Control Center battery-off + idle timer
   AvellKeyLight.exe dump                 read-only dump of EC registers 0x0740-0x07FF
-  AvellKeyLight.exe selftest             end-to-end test of the window + keyboard (exit KeyLight first)
+  AvellKeyLight.exe ec read <hexaddr> [count] | ec write <hexaddr> <hexvalue>
+                                          raw EC access (diagnostics)
+  AvellKeyLight.exe selftest            end-to-end test of the window + keyboard (exit KeyLight first)
 
   --out <file>                           also write command output to a file";
 
@@ -147,6 +149,27 @@ namespace KeyLight
                     Out("autostart     : " + Autostart.IsEnabled());
                     Out("vendor service: " + Vendor.ServiceStatus());
                     return 0;
+                }
+                // raw EC access for diagnostics: ec read <addr> [count] | ec write <addr> <value>
+                if (cmd == "ec" && a.Count >= 3)
+                {
+                    ushort addr = Convert.ToUInt16(a[2], 16);
+                    if (a[1] == "read")
+                    {
+                        int n = a.Count >= 4 ? int.Parse(a[3]) : 1;
+                        var sb = new StringBuilder(string.Format("0x{0:X4}:", addr));
+                        for (int i = 0; i < n; i++) sb.AppendFormat(" {0:X2}", ec.Read((ushort)(addr + i)));
+                        Out(sb.ToString());
+                        return 0;
+                    }
+                    if (a[1] == "write" && a.Count == 4)
+                    {
+                        byte v = Convert.ToByte(a[3], 16);
+                        ec.Write(addr, v);
+                        Out(string.Format("0x{0:X4} <- 0x{1:X2}, reads back 0x{2:X2}", addr, v, ec.Read(addr)));
+                        Log.Info("cli ec write 0x{0:X4} <- 0x{1:X2}", addr, v);
+                        return 0;
+                    }
                 }
                 if (cmd == "dump")
                 {
