@@ -33,7 +33,7 @@ namespace KeyLight
             string backup = File.Exists(Config.FilePath) ? File.ReadAllText(Config.FilePath) : null;
             var baseline = new Config
             {
-                Enabled = true, Brightness = 4, Color = Color.White, IntensityPercent = 100,
+                Enabled = true, Brightness = 4, MixRed = 60, MixGreen = 60, MixBlue = 100, IntensityPercent = 100,
                 Enforce = true, EnforceIntervalSec = 1, FollowFnKeys = true,
                 BatteryRule = false, FixVendorSettings = backup == null || Config.Load().FixVendorSettings,
                 StopVendorService = false, TrayIconPromoted = true
@@ -88,7 +88,7 @@ namespace KeyLight
                 Line(string.Format("   20 reads: avg {0:0.0} ms, worst {1} ms", sw.ElapsedMilliseconds / 20.0, worst));
 
                 phase = "startup";
-                Check("startup applies baseline (white, brightness 4)", WaitEc(Expect(4, Color.White, Cfg()), 8000));
+                Check("startup applies baseline (white, brightness 4)", WaitEc(Expect(4, Cfg()), 8000));
 
                 phase = "open window";
                 Ui(() => { form = app.ShowSettingsForTest(); });
@@ -103,14 +103,14 @@ namespace KeyLight
                     Ui(() => { form.TestBrightness.Value = vv; });
                     Thread.Sleep(40);
                 }
-                Check("brightness slider drag lands on 2", WaitEc(Expect(2, Color.White, Cfg()), 6000));
+                Check("brightness slider drag lands on 2", WaitEc(Expect(2, Cfg()), 6000));
                 Check("config saved brightness 2", Config.Load().Brightness == 2);
                 foreach (int v in new[] { 1, 3, 4 })
                 {
                     int vv = v;
                     phase = "brightness slider " + v;
                     Ui(() => { form.TestBrightness.Value = vv; });
-                    Check("brightness slider " + v, WaitEc(Expect(vv, Color.White, Cfg()), 6000));
+                    Check("brightness slider " + v, WaitEc(Expect(vv, Cfg()), 6000));
                 }
 
                 // Intensity slider drag 100 -> 5 -> 60
@@ -127,41 +127,46 @@ namespace KeyLight
                     Ui(() => { form.TestIntensity.Value = vv; });
                     Thread.Sleep(25);
                 }
-                Check("intensity slider drag lands on 60%", WaitEc(Expect(4, Color.White, Cfg()), 6000));
+                Check("intensity slider drag lands on 60%", WaitEc(Expect(4, Cfg()), 6000));
                 foreach (int v in new[] { 25, 100 })
                 {
                     int vv = v;
                     phase = "intensity " + v;
                     Ui(() => { form.TestIntensity.Value = vv; });
-                    Check("intensity " + v + "%", WaitEc(Expect(4, Color.White, Cfg()), 6000));
+                    Check("intensity " + v + "%", WaitEc(Expect(4, Cfg()), 6000));
                 }
 
                 // every color preset button
                 Button[] presets = UiGet(() => form.TestPresets);
-                Color[] colors = SettingsForm.TestPresetColors;
+                int[][] mixes = SettingsForm.TestPresetMixes;
                 for (int i = 0; i < presets.Length; i++)
                 {
                     Button b = presets[i];
-                    Color c = colors[i];
-                    phase = "preset " + Config.ToHex(c);
+                    int[] m = mixes[i];
+                    string name = string.Format("R{0} G{1} B{2}", m[0], m[1], m[2]);
+                    phase = "preset " + name;
                     Ui(() => b.PerformClick());
-                    Check("preset color " + Config.ToHex(c), WaitEc(Expect(4, c, Cfg()), 6000));
+                    Check("preset " + name + " -> sliders and LEDs",
+                        WaitEc(Expect(4, Cfg()), 6000) + "",
+                        UiGet(() => form.TestRed.Value == m[0] && form.TestGreen.Value == m[1] && form.TestBlue.Value == m[2]));
                 }
 
-                // white balance slider
-                phase = "white balance";
+                // each color slider changes ONLY its own LED, by exactly the amount set
                 Ui(() => presets[0].PerformClick());
-                Ui(() => { form.TestTrimRed.Value = 40; });
-                Check("red trim 40% changes white mix", WaitEc(Expect(4, Color.White, Cfg()), 6000));
-                Ui(() => { form.TestTrimRed.Value = 60; });
-                WaitEc(Expect(4, Color.White, Cfg()), 6000);
+                WaitEc(Expect(4, Cfg()), 6000);
+                ChannelSlider("Blue", () => form.TestBlue, 30, s => s.Blue, s => s.Red, s => s.Green);
+                ChannelSlider("Green", () => form.TestGreen, 0, s => s.Green, s => s.Red, s => s.Blue);
+                ChannelSlider("Red", () => form.TestRed, 100, s => s.Red, s => s.Green, s => s.Blue);
+                ChannelSlider("Blue", () => form.TestBlue, 100, s => s.Blue, s => s.Red, s => s.Green);
+                Ui(() => presets[0].PerformClick());
+                Check("white preset restored", WaitEc(Expect(4, Cfg()), 6000));
 
                 // on/off checkbox
                 phase = "on/off";
                 Ui(() => { form.TestOn.Checked = false; });
                 Check("'Backlight on' unchecked turns light off", WaitEc(s => !s.IsLit, 6000));
                 Ui(() => { form.TestOn.Checked = true; });
-                Check("'Backlight on' checked turns light back on", WaitEc(Expect(4, Color.White, Cfg()), 6000));
+                Check("'Backlight on' checked turns light back on", WaitEc(Expect(4, Cfg()), 6000));
 
                 // Fn key simulation: someone else sets brightness 3 on the EC
                 phase = "fn key";
@@ -173,7 +178,7 @@ namespace KeyLight
                 // vendor-style kill: brightness 0 must be reverted
                 phase = "vendor off";
                 WriteBrightness(0);
-                Check("external switch-off is reverted", WaitEc(Expect(3, Color.White, Cfg()), 6000));
+                Check("external switch-off is reverted", WaitEc(Expect(3, Cfg()), 6000));
 
                 // battery rule with simulated battery
                 phase = "battery rule";
@@ -181,13 +186,13 @@ namespace KeyLight
                 Enforcer.TestPercent = 50;
                 Enforcer.TestPowerOverride = true;
                 Update(c => { c.BatteryRule = true; c.BatteryTurnOff = false; c.BatteryBrightness = 1; c.BatteryThresholdPercent = 100; });
-                Check("battery rule: dim to 1 on battery", WaitEc(Expect(1, Color.White, Cfg()), 6000));
+                Check("battery rule: dim to 1 on battery", WaitEc(Expect(1, Cfg()), 6000));
                 Update(c => { c.BatteryTurnOff = true; });
                 Check("battery rule: turn off on battery", WaitEc(s => !s.IsLit, 6000));
                 Update(c => { c.BatteryThresholdPercent = 40; });
-                Check("battery rule: 50% > 40% threshold keeps setting", WaitEc(Expect(3, Color.White, Cfg()), 6000));
+                Check("battery rule: 50% > 40% threshold keeps setting", WaitEc(Expect(3, Cfg()), 6000));
                 Update(c => { c.BatteryThresholdPercent = 100; c.BatteryRule = false; });
-                Check("battery rule disabled: on battery stays at setting", WaitEc(Expect(3, Color.White, Cfg()), 6000));
+                Check("battery rule disabled: on battery stays at setting", WaitEc(Expect(3, Cfg()), 6000));
                 Enforcer.TestPowerOverride = false;
 
                 // window behaviour
@@ -244,10 +249,39 @@ namespace KeyLight
             });
         }
 
-        static Func<KbState, bool> Expect(int brightness, Color color, Config c)
+        // drags one color slider to target in steps; that LED must end at target% of 50,
+        // the other two must not move
+        static void ChannelSlider(string name, Func<TrackBar> bar, int target,
+            Func<KbState, int> own, Func<KbState, int> other1, Func<KbState, int> other2)
+        {
+            phase = name + " slider -> " + target;
+            KbState before = ProbeRead();
+            int from = UiGet(() => bar().Value);
+            int step = target > from ? 5 : -5;
+            for (int v = from; v != target; )
+            {
+                v = Math.Abs(target - v) < 5 ? target : v + step;
+                int vv = v;
+                Ui(() => { bar().Value = vv; });
+                Thread.Sleep(30);
+            }
+            string wait = WaitEc(Expect(4, Cfg()), 6000);
+            KbState after = ProbeRead();
+            int want = (int)Math.Round(Keyboard.MaxColorLevel * target / 100.0);
+            Check(string.Format("{0} slider {1}% -> {0} LED level {2}, other channels unchanged", name, target, want),
+                wait.StartsWith("OK") && Math.Abs(own(after) - want) <= 1 && other1(after) == other1(before) && other2(after) == other2(before),
+                string.Format("before [{0}] after [{1}]", before, after));
+        }
+
+        static void Check(string name, string waitResult, bool extra)
+        {
+            Check(name, waitResult.StartsWith("OK") && extra, waitResult + (extra ? "" : " (sliders did not match preset)"));
+        }
+
+        static Func<KbState, bool> Expect(int brightness, Config c)
         {
             byte r, g, b;
-            Keyboard.ComputeLevels(color, c.Gamma, c.TrimRed, c.TrimGreen, c.TrimBlue, c.IntensityPercent, out r, out g, out b);
+            c.Levels(out r, out g, out b);
             return s => s.IsLit && s.Brightness == brightness
                 && Math.Abs(s.Red - r) <= 1 && Math.Abs(s.Green - g) <= 1 && Math.Abs(s.Blue - b) <= 1;
         }

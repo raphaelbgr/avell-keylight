@@ -34,6 +34,7 @@ namespace KeyLight
         Keyboard kb;
         long seq;
         bool haveLast;
+        bool vendorUiWasOpen;
         DateTime lastStateWrite = DateTime.MinValue;
 
         public bool IsRgb { get; private set; }
@@ -149,7 +150,6 @@ namespace KeyLight
                     reason = pendingReason;
                     pendingReason = null;
                 }
-                c.ApplyCalibration(kb);
                 if (reason != null) DoApply(c, reason);
                 else Tick(c);
                 wake.WaitOne(c.EnforceIntervalSec * 1000);
@@ -164,11 +164,13 @@ namespace KeyLight
             try
             {
                 KbState before = haveLast ? last : kb.Read();
-                kb.Apply(target, c.Color, before);
+                byte r, g, b;
+                c.Levels(out r, out g, out b);
+                kb.Apply(target, r, g, b, before);
                 KbState after = kb.Read();
                 Trace("apply", reason, before, after, target);
                 Log.Info("apply ({0}, {1}): target brightness {2}, color {3}, intensity {4}%; before [{5}] after [{6}]",
-                    reason, why, target, Config.ToHex(c.Color), c.IntensityPercent, before, after);
+                    reason, why, target, c.MixText(), c.IntensityPercent, before, after);
                 haveLast = true;
                 lock (gate)
                 {
@@ -227,7 +229,31 @@ namespace KeyLight
                 return;
             }
 
-            if (c.Enforce && !kb.Matches(s, target, c.Color))
+            byte wr, wg, wb;
+            c.Levels(out wr, out wg, out wb);
+            // While the Avell Control Center window is open the user is changing the light
+            // there: don't fight it. Re-apply our setting once it closes.
+            bool vendorOpen = Vendor.UiOpen();
+            if (vendorOpen != vendorUiWasOpen)
+            {
+                vendorUiWasOpen = vendorOpen;
+                Log.Info(vendorOpen ? "Avell Control Center opened: enforcement paused" : "Avell Control Center closed: re-applying");
+                Trace("vendor-ui", vendorOpen ? "opened" : "closed", s, s, target);
+                if (!vendorOpen)
+                {
+                    DoApply(c, "vendor-ui-closed");
+                    return;
+                }
+                lock (gate) lastEvent = Log.Now() + " paused while Avell Control Center is open";
+                Raise();
+            }
+            if (vendorOpen)
+            {
+                if (changed) Raise();
+                return;
+            }
+
+            if (c.Enforce && !kb.Matches(s, target, wr, wg, wb))
             {
                 lock (gate) reapplies++;
                 DoApply(c, "reapply");

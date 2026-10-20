@@ -17,7 +17,7 @@ namespace KeyLight
   AvellKeyLight.exe                      open settings (keeps running in the tray)
   AvellKeyLight.exe --tray               start hidden in the tray (used at logon)
   AvellKeyLight.exe status               show keyboard registers and settings
-  AvellKeyLight.exe set [on|off] [brightness=1-4] [color=RRGGBB]
+  AvellKeyLight.exe set [on|off] [brightness=1-4] [rgb=R,G,B] [color=RRGGBB]
                                           save and apply a setting
   AvellKeyLight.exe autostart on|off     start with Windows
   AvellKeyLight.exe vendor fix|restore   neutralize / restore Control Center battery-off + idle timer
@@ -141,7 +141,7 @@ namespace KeyLight
                     bool batt = Enforcer.OnBattery(out pct);
                     Out("keyboard type : " + (kb.IsRgb ? "1-zone RGB" : "single color"));
                     Out("keyboard now  : " + kb.Read());
-                    Out(string.Format("settings      : enabled={0} brightness={1} color={2} enforce={3}/{4}s", c.Enabled, c.Brightness, Config.ToHex(c.Color), c.Enforce, c.EnforceIntervalSec));
+                    Out(string.Format("settings      : enabled={0} brightness={1} color={2} enforce={3}/{4}s", c.Enabled, c.Brightness, c.MixText(), c.Enforce, c.EnforceIntervalSec));
                     Out(string.Format("battery rule  : enabled={0} action={1} threshold={2}%", c.BatteryRule, c.BatteryTurnOff ? "off" : "dim to " + c.BatteryBrightness, c.BatteryThresholdPercent));
                     Out(string.Format("power         : {0}, {1}%", batt ? "battery" : "plugged in", pct));
                     Out("autostart     : " + Autostart.IsEnabled());
@@ -169,13 +169,15 @@ namespace KeyLight
                         if (p == "on") c.Enabled = true;
                         else if (p == "off") c.Enabled = false;
                         else if (p.StartsWith("brightness=") && int.TryParse(p.Substring(11), out n) && n >= 1 && n <= Keyboard.MaxBrightness) c.Brightness = n;
-                        else if (p.StartsWith("color=") && Config.TryParseHex(p.Substring(6), out col)) c.Color = col;
+                        else if (p.StartsWith("color=") && Config.TryParseHex(p.Substring(6), out col)) c.SetMix(Config.ToMix(col.R), Config.ToMix(col.G), Config.ToMix(col.B));
+                        else if (p.StartsWith("rgb=") && TryParseMix(p.Substring(4), c)) { }
                         else throw new ArgumentException("bad argument: " + a[i]);
                     }
                     c.Save();
-                    c.ApplyCalibration(kb);
                     KbState before = kb.Read();
-                    kb.Apply(c.Enabled ? c.Brightness : 0, c.Color);
+                    byte r, g, b;
+                    c.Levels(out r, out g, out b);
+                    kb.Apply(c.Enabled ? c.Brightness : 0, r, g, b, before);
                     Out("before: " + before);
                     Out("after : " + kb.Read());
                     Log.Info("cli set: before [{0}] after [{1}]", before, kb.Read());
@@ -188,6 +190,16 @@ namespace KeyLight
             }
             Out(Usage);
             return 2;
+        }
+
+        // "60,60,100" -> mix percentages
+        static bool TryParseMix(string s, Config c)
+        {
+            string[] p = s.Split(',');
+            int r, g, b;
+            if (p.Length != 3 || !int.TryParse(p[0], out r) || !int.TryParse(p[1], out g) || !int.TryParse(p[2], out b)) return false;
+            c.SetMix(r, g, b);
+            return true;
         }
 
         static void Out(string s)

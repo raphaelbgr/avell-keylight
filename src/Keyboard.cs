@@ -1,5 +1,4 @@
 using System;
-using System.Drawing;
 
 namespace KeyLight
 {
@@ -45,13 +44,6 @@ namespace KeyLight
         readonly Ec ec;
         public readonly bool IsRgb;
 
-        // Color calibration: LEDs are not linear, so mid values look too bright when
-        // mapped straight to 0-50. level = 50 * (channel/255)^Gamma * Trim/100
-        public double Gamma = 2.2;
-        public int TrimRed = 60, TrimGreen = 60, TrimBlue = 100;
-        // fine intensity on top of the 4 hardware brightness steps, by scaling the color levels
-        public int IntensityPercent = 100;
-
         public Keyboard(Ec ec)
         {
             this.ec = ec;
@@ -68,77 +60,34 @@ namespace KeyLight
             return s;
         }
 
-        // 0-255 color -> EC levels 0-50. Each channel goes through the gamma curve and its
-        // trim (white balance); the result is then scaled back so the strongest channel keeps
-        // full intensity, so trims change the mix (white, orange...) but never dim pure colors.
-        public void Levels(Color c, out byte r, out byte g, out byte b)
-        {
-            ComputeLevels(c, Gamma, TrimRed, TrimGreen, TrimBlue, IntensityPercent, out r, out g, out b);
-        }
-
-        public static void ComputeLevels(Color c, double gamma, int trimRed, int trimGreen, int trimBlue, int intensityPercent,
-            out byte r, out byte g, out byte b)
-        {
-            double fr = Math.Pow(c.R / 255.0, gamma) * trimRed / 100.0;
-            double fg = Math.Pow(c.G / 255.0, gamma) * trimGreen / 100.0;
-            double fb = Math.Pow(c.B / 255.0, gamma) * trimBlue / 100.0;
-            double peak = Math.Max(fr, Math.Max(fg, fb));
-            double want = Math.Pow(Math.Max(c.R, Math.Max(c.G, c.B)) / 255.0, gamma);
-            double scale = peak > 0 ? MaxColorLevel * want / peak * intensityPercent / 100.0 : 0;
-            r = ToByte(fr * scale);
-            g = ToByte(fg * scale);
-            b = ToByte(fb * scale);
-        }
-
-        static byte ToByte(double v)
-        {
-            return (byte)Math.Max(0, Math.Min(MaxColorLevel, Math.Round(v)));
-        }
-
         static bool Near(byte a, byte b)
         {
             // the EC may store level 1 where 0 was written
             return Math.Abs(a - b) <= 1;
         }
 
-        bool IsBlack(Color c)
+        public bool Matches(KbState s, int brightness, byte r, byte g, byte b)
         {
-            byte r, g, b;
-            Levels(c, out r, out g, out b);
-            return r == 0 && g == 0 && b == 0;
-        }
-
-        public bool Matches(KbState s, int brightness, Color color)
-        {
-            if (brightness <= 0 || IsBlack(color))
+            if (brightness <= 0 || (r == 0 && g == 0 && b == 0))
                 return !s.IsLit;
             if (s.PowerOffBit || s.Brightness != brightness)
                 return false;
             if (!IsRgb)
                 return true;
-            byte r, g, b;
-            Levels(color, out r, out g, out b);
             return Near(s.Red, r) && Near(s.Green, g) && Near(s.Blue, b);
-        }
-
-        public void Apply(int brightness, Color color)
-        {
-            Apply(brightness, color, Read());
         }
 
         // current = last known EC state; color registers that already hold the wanted
         // levels are not rewritten (every EC call costs ~0.1-0.2 s)
-        public void Apply(int brightness, Color color, KbState current)
+        public void Apply(int brightness, byte r, byte g, byte b, KbState current)
         {
             if (brightness < 0) brightness = 0;
             if (brightness > MaxBrightness) brightness = MaxBrightness;
             // all-zero color triggers an EC "load defaults" special case, so treat black as off
-            if (IsBlack(color)) brightness = 0;
+            if (r == 0 && g == 0 && b == 0) brightness = 0;
 
             if (IsRgb && brightness > 0)
             {
-                byte r, g, b;
-                Levels(color, out r, out g, out b);
                 if (current.Red != r || current.Green != g || current.Blue != b)
                 {
                     ec.Write(RegRed, r);

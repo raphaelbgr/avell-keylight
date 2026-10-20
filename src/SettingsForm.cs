@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -10,14 +11,22 @@ namespace KeyLight
         bool loading;
 
         readonly CheckBox chkOn = new CheckBox { Text = "Backlight on", AutoSize = true };
-        readonly TrackBar trkBright = new TrackBar { Minimum = 1, Maximum = Keyboard.MaxBrightness, Width = 220, TickStyle = TickStyle.BottomRight };
-        readonly Label lblBright = new Label { AutoSize = true };
-        readonly TrackBar trkIntensity = new TrackBar { Minimum = 5, Maximum = 100, TickFrequency = 5, SmallChange = 1, LargeChange = 5, Width = 220 };
+        readonly TrackBar trkBright = new TrackBar { Minimum = 1, Maximum = Keyboard.MaxBrightness, Width = 260, TickStyle = TickStyle.BottomRight };
+        readonly Label lblBright = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        readonly TrackBar trkIntensity = new TrackBar { Minimum = 5, Maximum = 100, TickFrequency = 5, SmallChange = 1, LargeChange = 5, Width = 260 };
         readonly Label lblIntensity = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
-        readonly Panel swatch = new Panel { Width = 60, Height = 26, BorderStyle = BorderStyle.FixedSingle };
-        readonly Button btnColor = new Button { Text = "Pick color...", AutoSize = true };
         readonly CheckBox chkEnforce = new CheckBox { Text = "Keep my setting (re-apply if anything changes it)", AutoSize = true };
         readonly NumericUpDown numInterval = new NumericUpDown { Minimum = 1, Maximum = 60, Width = 50 };
+
+        // color = the level each LED channel gets, sent as-is
+        readonly TrackBar trkRed = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 1, LargeChange = 5, Width = 260 };
+        readonly TrackBar trkGreen = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 1, LargeChange = 5, Width = 260 };
+        readonly TrackBar trkBlue = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 1, LargeChange = 5, Width = 260 };
+        readonly Label lblRed = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        readonly Label lblGreen = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        readonly Label lblBlue = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        readonly Panel swatch = new Panel { Width = 60, Height = 26, BorderStyle = BorderStyle.FixedSingle };
+        readonly Button btnColor = new Button { Text = "Pick color...", AutoSize = true };
 
         readonly CheckBox chkBatt = new CheckBox { Text = "Enable battery rule (off by default)", AutoSize = true };
         readonly RadioButton rbDim = new RadioButton { Text = "Dim to level", AutoSize = true };
@@ -29,33 +38,36 @@ namespace KeyLight
         readonly CheckBox chkFixVendor = new CheckBox { Text = "Neutralize Avell Control Center battery-off and idle timer", AutoSize = true };
         readonly CheckBox chkStopVendor = new CheckBox { Text = "Stop Avell Control Center service while KeyLight runs", AutoSize = true };
 
-        readonly TrackBar trkRed = new TrackBar { Minimum = 5, Maximum = 100, TickFrequency = 10, Width = 260 };
-        readonly TrackBar trkGreen = new TrackBar { Minimum = 5, Maximum = 100, TickFrequency = 10, Width = 260 };
-        readonly TrackBar trkBlue = new TrackBar { Minimum = 5, Maximum = 100, TickFrequency = 10, Width = 260 };
-        readonly Label lblRed = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
-        readonly Label lblGreen = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
-        readonly Label lblBlue = new Label { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
-        readonly NumericUpDown numGamma = new NumericUpDown { Minimum = 1.0m, Maximum = 3.0m, Increment = 0.1m, DecimalPlaces = 1, Width = 55 };
-
         readonly Label lblStatus = new Label { AutoSize = true, MaximumSize = new Size(470, 0) };
 
-        static readonly Color[] Presets =
+        // LED mixes (R, G, B in %) tuned on the Avell C62: the blue LED is the weakest,
+        // so white needs less red and green
+        static readonly int[][] Presets =
         {
-            Color.White, Color.FromArgb(0, 0, 255), Color.Cyan, Color.Lime, Color.Yellow,
-            Color.FromArgb(255, 128, 0), Color.Red, Color.FromArgb(160, 0, 255), Color.FromArgb(255, 0, 160)
+            new[] { 60, 60, 100 },  // white
+            new[] { 0, 0, 100 },    // blue
+            new[] { 0, 60, 100 },   // cyan
+            new[] { 0, 100, 0 },    // green
+            new[] { 100, 100, 0 },  // yellow
+            new[] { 100, 22, 0 },   // orange
+            new[] { 100, 0, 0 },    // red
+            new[] { 22, 0, 100 },   // purple
+            new[] { 100, 0, 60 }    // pink
         };
 
-        readonly System.Collections.Generic.List<Button> presetButtons = new System.Collections.Generic.List<Button>();
+        readonly List<Button> presetButtons = new List<Button>();
         Button btnHideTray;
 
         // self-test access to the real controls
         internal TrackBar TestBrightness { get { return trkBright; } }
         internal TrackBar TestIntensity { get { return trkIntensity; } }
-        internal TrackBar TestTrimRed { get { return trkRed; } }
+        internal TrackBar TestRed { get { return trkRed; } }
+        internal TrackBar TestGreen { get { return trkGreen; } }
+        internal TrackBar TestBlue { get { return trkBlue; } }
         internal CheckBox TestOn { get { return chkOn; } }
         internal Button[] TestPresets { get { return presetButtons.ToArray(); } }
         internal Button TestHide { get { return btnHideTray; } }
-        internal static Color[] TestPresetColors { get { return Presets; } }
+        internal static int[][] TestPresetMixes { get { return Presets; } }
 
         public SettingsForm(TrayApp app)
         {
@@ -76,45 +88,32 @@ namespace KeyLight
             gLight.Controls.Add(chkOn);
             gLight.Controls.Add(Row(Fixed("Brightness", 75), trkBright, lblBright));
             gLight.Controls.Add(Row(Fixed("Intensity", 75), trkIntensity, lblIntensity));
-            if (!app.Enforcer.IsRgb) trkIntensity.Enabled = false;
-            var presets = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-            foreach (Color c in Presets)
-            {
-                Color pc = c;
-                var b = new Button { Width = 26, Height = 26, BackColor = pc, FlatStyle = FlatStyle.Flat, Margin = new Padding(2) };
-                b.Click += delegate { SetColor(pc); };
-                presets.Controls.Add(b);
-                presetButtons.Add(b);
-            }
-            gLight.Controls.Add(Row(new Label { Text = "Color", AutoSize = true, Margin = new Padding(0, 8, 0, 0) }, swatch, btnColor));
-            gLight.Controls.Add(presets);
-            if (!app.Enforcer.IsRgb) { btnColor.Enabled = false; presets.Enabled = false; }
             gLight.Controls.Add(chkEnforce);
             gLight.Controls.Add(Row(new Label { Text = "Check every", AutoSize = true, Margin = new Padding(0, 6, 0, 0) }, numInterval, new Label { Text = "seconds", AutoSize = true, Margin = new Padding(0, 6, 0, 0) }));
             root.Controls.Add(gLight.Parent);
 
-            // Color calibration
-            var gCal = Group("Color calibration (pick white, then lower the channel that is too strong)");
-            gCal.Controls.Add(Row(Fixed("Red", 50), trkRed, lblRed));
-            gCal.Controls.Add(Row(Fixed("Green", 50), trkGreen, lblGreen));
-            gCal.Controls.Add(Row(Fixed("Blue", 50), trkBlue, lblBlue));
-            var btnWhite = new Button { Text = "Test white", AutoSize = true };
-            var btnReset = new Button { Text = "Reset calibration", AutoSize = true };
-            btnWhite.Click += delegate { SetColor(Color.White); };
-            btnReset.Click += delegate
+            // Color
+            var gColor = Group("Color (each slider = how strong that LED is)");
+            gColor.Controls.Add(Row(Fixed("Red", 75), trkRed, lblRed));
+            gColor.Controls.Add(Row(Fixed("Green", 75), trkGreen, lblGreen));
+            gColor.Controls.Add(Row(Fixed("Blue", 75), trkBlue, lblBlue));
+            var presets = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+            foreach (int[] p in Presets)
             {
-                var d = new Config();
-                loading = true;
-                trkRed.Value = d.TrimRed;
-                trkGreen.Value = d.TrimGreen;
-                trkBlue.Value = d.TrimBlue;
-                numGamma.Value = (decimal)d.Gamma;
-                loading = false;
-                OnChanged();
-            };
-            gCal.Controls.Add(Row(new Label { Text = "Mid-tone curve (gamma)", AutoSize = true, Margin = new Padding(0, 6, 0, 0) }, numGamma, btnWhite, btnReset));
-            if (!app.Enforcer.IsRgb) gCal.Enabled = false;
-            root.Controls.Add(gCal.Parent);
+                int[] mix = p;
+                var b = new Button { Width = 26, Height = 26, BackColor = Config.MixToScreen(mix[0], mix[1], mix[2]), FlatStyle = FlatStyle.Flat, Margin = new Padding(2) };
+                b.Click += delegate { SetMix(mix[0], mix[1], mix[2]); };
+                presets.Controls.Add(b);
+                presetButtons.Add(b);
+            }
+            gColor.Controls.Add(Row(Fixed("Presets", 75), presets));
+            gColor.Controls.Add(Row(Fixed("Preview", 75), swatch, btnColor));
+            if (!app.Enforcer.IsRgb)
+            {
+                gColor.Enabled = false;
+                trkIntensity.Enabled = false;
+            }
+            root.Controls.Add(gColor.Parent);
 
             // Battery rule
             var gBatt = Group("Battery (optional)");
@@ -149,6 +148,9 @@ namespace KeyLight
             chkOn.CheckedChanged += changed;
             trkBright.ValueChanged += changed;
             trkIntensity.ValueChanged += changed;
+            trkRed.ValueChanged += changed;
+            trkGreen.ValueChanged += changed;
+            trkBlue.ValueChanged += changed;
             chkEnforce.CheckedChanged += changed;
             numInterval.ValueChanged += changed;
             chkBatt.CheckedChanged += changed;
@@ -158,15 +160,12 @@ namespace KeyLight
             numThreshold.ValueChanged += changed;
             chkFixVendor.CheckedChanged += changed;
             chkStopVendor.CheckedChanged += changed;
-            trkRed.ValueChanged += changed;
-            trkGreen.ValueChanged += changed;
-            trkBlue.ValueChanged += changed;
-            numGamma.ValueChanged += changed;
             chkAutostart.CheckedChanged += delegate { OnAutostart(); };
             btnColor.Click += delegate
             {
                 using (var dlg = new ColorDialog { Color = swatch.BackColor, FullOpen = true })
-                    if (dlg.ShowDialog(this) == DialogResult.OK) SetColor(dlg.Color);
+                    if (dlg.ShowDialog(this) == DialogResult.OK)
+                        SetMix(Config.ToMix(dlg.Color.R), Config.ToMix(dlg.Color.G), Config.ToMix(dlg.Color.B));
             };
 
             app.Enforcer.Changed += OnEnforcerChanged;
@@ -187,13 +186,6 @@ namespace KeyLight
             return new Label { Text = text, AutoSize = false, Width = width, Height = 20, Margin = new Padding(0, 8, 0, 0) };
         }
 
-        void UpdateTrimLabels()
-        {
-            lblRed.Text = trkRed.Value + "%";
-            lblGreen.Text = trkGreen.Value + "%";
-            lblBlue.Text = trkBlue.Value + "%";
-        }
-
         static FlowLayoutPanel Row(params Control[] items)
         {
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
@@ -201,13 +193,25 @@ namespace KeyLight
             return row;
         }
 
+        void UpdateLabels()
+        {
+            lblBright.Text = trkBright.Value + " / " + Keyboard.MaxBrightness;
+            lblIntensity.Text = trkIntensity.Value + "%";
+            lblRed.Text = trkRed.Value + "%";
+            lblGreen.Text = trkGreen.Value + "%";
+            lblBlue.Text = trkBlue.Value + "%";
+            swatch.BackColor = Config.MixToScreen(trkRed.Value, trkGreen.Value, trkBlue.Value);
+        }
+
         public void LoadFrom(Config c)
         {
             loading = true;
             chkOn.Checked = c.Enabled;
             trkBright.Value = c.Brightness;
-            lblBright.Text = c.Brightness + " / " + Keyboard.MaxBrightness;
-            swatch.BackColor = c.Color;
+            trkIntensity.Value = c.IntensityPercent;
+            trkRed.Value = c.MixRed;
+            trkGreen.Value = c.MixGreen;
+            trkBlue.Value = c.MixBlue;
             chkEnforce.Checked = c.Enforce;
             numInterval.Value = c.EnforceIntervalSec;
             chkBatt.Checked = c.BatteryRule;
@@ -218,13 +222,7 @@ namespace KeyLight
             chkFixVendor.Checked = c.FixVendorSettings;
             chkStopVendor.Checked = c.StopVendorService;
             chkAutostart.Checked = Autostart.IsEnabled();
-            trkIntensity.Value = c.IntensityPercent;
-            lblIntensity.Text = c.IntensityPercent + "%";
-            trkRed.Value = c.TrimRed;
-            trkGreen.Value = c.TrimGreen;
-            trkBlue.Value = c.TrimBlue;
-            numGamma.Value = (decimal)c.Gamma;
-            UpdateTrimLabels();
+            UpdateLabels();
             UpdateEnabledState();
             loading = false;
         }
@@ -236,9 +234,14 @@ namespace KeyLight
             numInterval.Enabled = chkEnforce.Checked;
         }
 
-        void SetColor(Color c)
+        void SetMix(int r, int g, int b)
         {
-            swatch.BackColor = c;
+            // move all three sliders, then apply once
+            loading = true;
+            trkRed.Value = r;
+            trkGreen.Value = g;
+            trkBlue.Value = b;
+            loading = false;
             OnChanged();
         }
 
@@ -246,11 +249,12 @@ namespace KeyLight
         {
             if (loading) return;
             UpdateEnabledState();
-            lblBright.Text = trkBright.Value + " / " + Keyboard.MaxBrightness;
+            UpdateLabels();
             Config c = app.Cfg.Clone();
             c.Enabled = chkOn.Checked;
             c.Brightness = trkBright.Value;
-            c.Color = Color.FromArgb(swatch.BackColor.R, swatch.BackColor.G, swatch.BackColor.B);
+            c.IntensityPercent = trkIntensity.Value;
+            c.SetMix(trkRed.Value, trkGreen.Value, trkBlue.Value);
             c.Enforce = chkEnforce.Checked;
             c.EnforceIntervalSec = (int)numInterval.Value;
             c.BatteryRule = chkBatt.Checked;
@@ -259,13 +263,6 @@ namespace KeyLight
             c.BatteryThresholdPercent = (int)numThreshold.Value;
             c.FixVendorSettings = chkFixVendor.Checked;
             c.StopVendorService = chkStopVendor.Checked;
-            c.TrimRed = trkRed.Value;
-            c.TrimGreen = trkGreen.Value;
-            c.TrimBlue = trkBlue.Value;
-            c.Gamma = (double)numGamma.Value;
-            c.IntensityPercent = trkIntensity.Value;
-            lblIntensity.Text = trkIntensity.Value + "%";
-            UpdateTrimLabels();
             app.Update(c);
         }
 
@@ -299,9 +296,9 @@ namespace KeyLight
             bool batt = Enforcer.OnBattery(out pct);
             KbState s = app.Enforcer.Current;
             lblStatus.Text = string.Format(
-                "Keyboard: {0} (brightness {1}/{2})\r\nTarget: {3} ({4})\r\nPower: {5}, battery {6}%\r\nRe-applied {7} time(s). {8}\r\nAvell service: {9}\r\nLogs: {10}",
-                s.IsLit ? "lit" : "off", s.Brightness, Keyboard.MaxBrightness, target, why,
-                batt ? "on battery" : "plugged in", pct, app.Enforcer.Reapplies, app.Enforcer.LastEvent,
+                "Keyboard: {0} (brightness {1}/{2}, LED levels R{3} G{4} B{5} of {6})\r\nTarget: {7} ({8})\r\nPower: {9}, battery {10}%\r\nRe-applied {11} time(s). {12}\r\nAvell service: {13}\r\nLogs: {14}",
+                s.IsLit ? "lit" : "off", s.Brightness, Keyboard.MaxBrightness, s.Red, s.Green, s.Blue, Keyboard.MaxColorLevel,
+                target, why, batt ? "on battery" : "plugged in", pct, app.Enforcer.Reapplies, app.Enforcer.LastEvent,
                 Vendor.ServiceStatus(), Log.Dir);
         }
 

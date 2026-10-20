@@ -81,6 +81,14 @@ namespace KeyLight
             return string.Format("vendor settings restored: DCLight={0}, CloseTimer={1}", dc, timer);
         }
 
+        // The Control Center window (UWP app GamingCenter3_Cross.exe) is open
+        public static bool UiOpen()
+        {
+            System.Diagnostics.Process[] ps = System.Diagnostics.Process.GetProcessesByName("GamingCenter3_Cross");
+            foreach (var p in ps) p.Dispose();
+            return ps.Length > 0;
+        }
+
         public static string ServiceStatus()
         {
             try
