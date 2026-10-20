@@ -45,6 +45,11 @@ namespace KeyLight
         readonly Ec ec;
         public readonly bool IsRgb;
 
+        // Color calibration: LEDs are not linear, so mid values look too bright when
+        // mapped straight to 0-50. level = 50 * (channel/255)^Gamma * Trim/100
+        public double Gamma = 2.2;
+        public int TrimRed = 60, TrimGreen = 60, TrimBlue = 100;
+
         public Keyboard(Ec ec)
         {
             this.ec = ec;
@@ -61,10 +66,25 @@ namespace KeyLight
             return s;
         }
 
-        // 0-255 color channel -> EC level 0-50
-        public static byte ToLevel(int channel)
+        // 0-255 color -> EC levels 0-50. Each channel goes through the gamma curve and its
+        // trim (white balance); the result is then scaled back so the strongest channel keeps
+        // full intensity, so trims change the mix (white, orange...) but never dim pure colors.
+        public void Levels(Color c, out byte r, out byte g, out byte b)
         {
-            return (byte)(channel * MaxColorLevel / 255);
+            double fr = Math.Pow(c.R / 255.0, Gamma) * TrimRed / 100.0;
+            double fg = Math.Pow(c.G / 255.0, Gamma) * TrimGreen / 100.0;
+            double fb = Math.Pow(c.B / 255.0, Gamma) * TrimBlue / 100.0;
+            double peak = Math.Max(fr, Math.Max(fg, fb));
+            double want = Math.Pow(Math.Max(c.R, Math.Max(c.G, c.B)) / 255.0, Gamma);
+            double scale = peak > 0 ? MaxColorLevel * want / peak : 0;
+            r = ToByte(fr * scale);
+            g = ToByte(fg * scale);
+            b = ToByte(fb * scale);
+        }
+
+        static byte ToByte(double v)
+        {
+            return (byte)Math.Max(0, Math.Min(MaxColorLevel, Math.Round(v)));
         }
 
         static bool Near(byte a, byte b)
@@ -73,9 +93,11 @@ namespace KeyLight
             return Math.Abs(a - b) <= 1;
         }
 
-        static bool IsBlack(Color c)
+        bool IsBlack(Color c)
         {
-            return ToLevel(c.R) == 0 && ToLevel(c.G) == 0 && ToLevel(c.B) == 0;
+            byte r, g, b;
+            Levels(c, out r, out g, out b);
+            return r == 0 && g == 0 && b == 0;
         }
 
         public bool Matches(KbState s, int brightness, Color color)
@@ -86,7 +108,9 @@ namespace KeyLight
                 return false;
             if (!IsRgb)
                 return true;
-            return Near(s.Red, ToLevel(color.R)) && Near(s.Green, ToLevel(color.G)) && Near(s.Blue, ToLevel(color.B));
+            byte r, g, b;
+            Levels(color, out r, out g, out b);
+            return Near(s.Red, r) && Near(s.Green, g) && Near(s.Blue, b);
         }
 
         public void Apply(int brightness, Color color)
@@ -98,9 +122,11 @@ namespace KeyLight
 
             if (IsRgb && brightness > 0)
             {
-                ec.Write(RegRed, ToLevel(color.R));
-                ec.Write(RegGreen, ToLevel(color.G));
-                ec.Write(RegBlue, ToLevel(color.B));
+                byte r, g, b;
+                Levels(color, out r, out g, out b);
+                ec.Write(RegRed, r);
+                ec.Write(RegGreen, g);
+                ec.Write(RegBlue, b);
                 ec.Write(RegRgbMode, (byte)(ec.Read(RegRgbMode) | 0x20));
             }
 

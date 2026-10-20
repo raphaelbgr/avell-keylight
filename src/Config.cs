@@ -31,12 +31,29 @@ namespace KeyLight
         public int BatteryBrightness = 1;
         public int BatteryThresholdPercent = 100;            // 100 = whenever on battery
 
+        // Color calibration (white balance). Defaults tuned on an Avell C62, where
+        // equal levels look yellow because red+green outshine blue.
+        public double Gamma = 2.2;
+        public int TrimRed = 60;
+        public int TrimGreen = 60;
+        public int TrimBlue = 100;
+
+        public bool TrayIconPromoted = false;                // tray icon made always-visible once
+
         public bool FixVendorSettings = true;                // neutralize Control Center battery-off + idle timer
         public bool StopVendorService = false;               // stop GCUBridge while KeyLight runs
 
         public Config Clone()
         {
             return (Config)MemberwiseClone();
+        }
+
+        public void ApplyCalibration(Keyboard kb)
+        {
+            kb.Gamma = Gamma;
+            kb.TrimRed = TrimRed;
+            kb.TrimGreen = TrimGreen;
+            kb.TrimBlue = TrimBlue;
         }
 
         public static Config Load()
@@ -62,6 +79,13 @@ namespace KeyLight
             c.BatteryThresholdPercent = Clamp(GetInt(kv, "BatteryThresholdPercent", c.BatteryThresholdPercent), 1, 100);
             c.FixVendorSettings = GetBool(kv, "FixVendorSettings", c.FixVendorSettings);
             c.StopVendorService = GetBool(kv, "StopVendorService", c.StopVendorService);
+            string gs;
+            double g;
+            if (kv.TryGetValue("Gamma", out gs) && double.TryParse(gs, NumberStyles.Float, CultureInfo.InvariantCulture, out g) && g >= 1.0 && g <= 3.0) c.Gamma = g;
+            c.TrimRed = Clamp(GetInt(kv, "TrimRed", c.TrimRed), 5, 100);
+            c.TrimGreen = Clamp(GetInt(kv, "TrimGreen", c.TrimGreen), 5, 100);
+            c.TrimBlue = Clamp(GetInt(kv, "TrimBlue", c.TrimBlue), 5, 100);
+            c.TrayIconPromoted = GetBool(kv, "TrayIconPromoted", c.TrayIconPromoted);
             return c;
         }
 
@@ -81,6 +105,11 @@ namespace KeyLight
             sb.AppendLine("BatteryThresholdPercent=" + BatteryThresholdPercent);
             sb.AppendLine("FixVendorSettings=" + FixVendorSettings);
             sb.AppendLine("StopVendorService=" + StopVendorService);
+            sb.AppendLine("Gamma=" + Gamma.ToString("0.0#", CultureInfo.InvariantCulture));
+            sb.AppendLine("TrimRed=" + TrimRed);
+            sb.AppendLine("TrimGreen=" + TrimGreen);
+            sb.AppendLine("TrimBlue=" + TrimBlue);
+            sb.AppendLine("TrayIconPromoted=" + TrayIconPromoted);
             string tmp = FilePath + ".tmp";
             File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
             if (File.Exists(FilePath)) File.Delete(FilePath);

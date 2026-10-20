@@ -153,6 +153,7 @@ namespace KeyLight
                         else throw new ArgumentException("bad argument: " + a[i]);
                     }
                     c.Save();
+                    c.ApplyCalibration(kb);
                     KbState before = kb.Read();
                     kb.Apply(c.Enabled ? c.Brightness : 0, c.Color);
                     Out("before: " + before);

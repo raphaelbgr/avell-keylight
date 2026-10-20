@@ -22,7 +22,9 @@ The vendor background service (`GCUService.exe`, started by the `GCUBridge` Wind
 - **Start with Windows:** a Task Scheduler logon task with highest privileges, so there is no UAC prompt at logon. The task is set to start and keep running on battery, which Windows does not do by default.
 - **Neutralize Control Center:** sets the vendor battery brightness equal to the plugged-in brightness and disables its idle timer. The original values are backed up and can be restored.
 - Optional: stop the vendor service while KeyLight runs. This is off by default, because that service also drives fan profiles and the Fn hotkey overlay.
-- Tray icon with a quick menu, plus a command-line interface.
+- **Color calibration:** per-channel trims (white balance) plus a mid-tone curve (gamma). LEDs are not linear, and on the Avell C62 equal red, green, and blue levels look yellow, so the defaults are red 60%, green 60%, blue 100%, gamma 2.2. The strongest channel is always kept at full intensity, so the trims change how colors mix but never dim pure red, green, or blue. Use **Test white** and lower whichever channel is too strong.
+- Tray icon: left-click opens settings, right-click shows a quick menu (on/off, brightness, **Exit KeyLight**). Minimize, close, or **Hide to tray** all keep it running in the tray. The icon is set to always visible on the taskbar.
+- A command-line interface.
 - Diagnostics: every change seen on the keyboard controller is written with a timestamp to `%ProgramData%\AvellKeyLight\logs\trace.jsonl`, and the live status goes to `state.json`. This shows exactly when and how the light was changed.
 
 ## Install

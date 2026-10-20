@@ -29,6 +29,7 @@ namespace KeyLight
             this.kb = kb;
             this.cfg = cfg;
             this.ui = ui;
+            cfg.ApplyCalibration(kb);
             timer.Interval = cfg.EnforceIntervalSec * 1000;
             timer.Tick += delegate { Tick(); };
             timer.Start();
@@ -38,6 +39,7 @@ namespace KeyLight
         public void UpdateConfig(Config c)
         {
             cfg = c;
+            c.ApplyCalibration(kb);
             timer.Interval = c.EnforceIntervalSec * 1000;
             ApplyNow("config");
         }

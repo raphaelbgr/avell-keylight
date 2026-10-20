@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace KeyLight
 {
@@ -38,8 +39,26 @@ namespace KeyLight
             tray.Icon = MakeIcon();
             tray.Text = "Avell KeyLight";
             tray.Visible = true;
-            tray.DoubleClick += delegate { ShowSettings(); };
+            tray.MouseClick += delegate(object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowSettings(); };
             tray.ContextMenuStrip = BuildMenu();
+
+            if (!Cfg.TrayIconPromoted)
+            {
+                // Windows registers the icon a moment after it is first shown
+                var once = new System.Windows.Forms.Timer { Interval = 3000 };
+                once.Tick += delegate
+                {
+                    once.Dispose();
+                    if (PromoteTrayIcon())
+                    {
+                        Config c = Cfg.Clone();
+                        c.TrayIconPromoted = true;
+                        Cfg = c;
+                        Cfg.Save();
+                    }
+                };
+                once.Start();
+            }
 
             showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
             reloadEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ReloadEventName);
@@ -47,6 +66,35 @@ namespace KeyLight
             reloadWait = ThreadPool.RegisterWaitForSingleObject(reloadEvent, delegate { ui.BeginInvoke((MethodInvoker)ReloadFromDisk); }, null, -1, false);
 
             if (showWindow) ShowSettings();
+        }
+
+        // Windows 11 hides new tray icons in the overflow (^). This marks ours as shown
+        // on the taskbar, once; the user can still hide it again in Settings.
+        static bool PromoteTrayIcon()
+        {
+            try
+            {
+                using (RegistryKey root = Registry.CurrentUser.OpenSubKey(@"Control Panel\NotifyIconSettings", true))
+                {
+                    if (root == null) return false;
+                    foreach (string id in root.GetSubKeyNames())
+                    {
+                        using (RegistryKey k = root.OpenSubKey(id, true))
+                        {
+                            string path = k == null ? null : k.GetValue("ExecutablePath") as string;
+                            if (path == null || !path.EndsWith("AvellKeyLight.exe", StringComparison.OrdinalIgnoreCase)) continue;
+                            k.SetValue("IsPromoted", 1, RegistryValueKind.DWord);
+                            Log.Info("tray icon promoted to always visible ({0})", path);
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Info("tray icon promote failed: {0}", ex.Message);
+            }
+            return false;
         }
 
         static string TryRun(Func<string> f)
@@ -80,7 +128,7 @@ namespace KeyLight
             m.Items.Add(bright);
             m.Items.Add("Re-apply now", null, delegate { Enforcer.ApplyNow("manual"); });
             m.Items.Add(new ToolStripSeparator());
-            m.Items.Add("Exit", null, delegate { ExitThread(); });
+            m.Items.Add("Exit KeyLight", null, delegate { ExitThread(); });
             return m;
         }
 
@@ -100,6 +148,11 @@ namespace KeyLight
         {
             Log.Info("reload requested");
             Update(Config.Load());
+        }
+
+        public void Exit()
+        {
+            ExitThread();
         }
 
         void ShowSettings()
