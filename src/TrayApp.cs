@@ -14,8 +14,6 @@ namespace KeyLight
 
         readonly Control ui = new Control();
         readonly NotifyIcon tray = new NotifyIcon();
-        readonly Ec ec;
-        public readonly Keyboard Kb;
         public readonly Enforcer Enforcer;
         public Config Cfg;
         SettingsForm form;
@@ -26,15 +24,18 @@ namespace KeyLight
         {
             ui.CreateControl();
             Cfg = Config.Load();
-            ec = new Ec();
-            Kb = new Keyboard(ec);
-            Log.Info("start: keyboard type {0}, initial [{1}]", Kb.IsRgb ? "1-zone RGB" : "single color", Kb.Read());
 
             if (Cfg.FixVendorSettings) Log.Info(TryRun(Vendor.FixSettings));
             if (Cfg.StopVendorService) Log.Info(Vendor.StopService());
 
-            Enforcer = new Enforcer(Kb, Cfg, ui);
-            Enforcer.ApplyNow("startup");
+            // the enforcer owns the EC on its own worker thread and applies the setting at start
+            Enforcer = new Enforcer(Cfg, ui);
+            Enforcer.HotkeyBrightness += delegate(int level)
+            {
+                Config c = Cfg.Clone();
+                c.Brightness = level;
+                Update(c);
+            };
 
             tray.Icon = MakeIcon();
             tray.Text = "Avell KeyLight";
@@ -155,6 +156,24 @@ namespace KeyLight
             ExitThread();
         }
 
+        internal void TestInvoke(Action a)
+        {
+            ui.Invoke(a);
+        }
+
+        internal SettingsForm ShowSettingsForTest()
+        {
+            ShowSettings();
+            return form;
+        }
+
+        internal ToolStripItem TestMenuItem(string text)
+        {
+            foreach (ToolStripItem i in tray.ContextMenuStrip.Items)
+                if (i.Text == text) return i;
+            return null;
+        }
+
         void ShowSettings()
         {
             if (form == null || form.IsDisposed) form = new SettingsForm(this);
@@ -173,7 +192,6 @@ namespace KeyLight
             tray.Visible = false;
             tray.Dispose();
             Enforcer.Dispose();
-            ec.Dispose();
             if (form != null) form.Dispose();
             base.ExitThreadCore();
         }

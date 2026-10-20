@@ -45,6 +45,18 @@ namespace KeyLight
             Color.FromArgb(255, 128, 0), Color.Red, Color.FromArgb(160, 0, 255), Color.FromArgb(255, 0, 160)
         };
 
+        readonly System.Collections.Generic.List<Button> presetButtons = new System.Collections.Generic.List<Button>();
+        Button btnHideTray;
+
+        // self-test access to the real controls
+        internal TrackBar TestBrightness { get { return trkBright; } }
+        internal TrackBar TestIntensity { get { return trkIntensity; } }
+        internal TrackBar TestTrimRed { get { return trkRed; } }
+        internal CheckBox TestOn { get { return chkOn; } }
+        internal Button[] TestPresets { get { return presetButtons.ToArray(); } }
+        internal Button TestHide { get { return btnHideTray; } }
+        internal static Color[] TestPresetColors { get { return Presets; } }
+
         public SettingsForm(TrayApp app)
         {
             this.app = app;
@@ -64,7 +76,7 @@ namespace KeyLight
             gLight.Controls.Add(chkOn);
             gLight.Controls.Add(Row(Fixed("Brightness", 75), trkBright, lblBright));
             gLight.Controls.Add(Row(Fixed("Intensity", 75), trkIntensity, lblIntensity));
-            if (!app.Kb.IsRgb) trkIntensity.Enabled = false;
+            if (!app.Enforcer.IsRgb) trkIntensity.Enabled = false;
             var presets = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
             foreach (Color c in Presets)
             {
@@ -72,10 +84,11 @@ namespace KeyLight
                 var b = new Button { Width = 26, Height = 26, BackColor = pc, FlatStyle = FlatStyle.Flat, Margin = new Padding(2) };
                 b.Click += delegate { SetColor(pc); };
                 presets.Controls.Add(b);
+                presetButtons.Add(b);
             }
             gLight.Controls.Add(Row(new Label { Text = "Color", AutoSize = true, Margin = new Padding(0, 8, 0, 0) }, swatch, btnColor));
             gLight.Controls.Add(presets);
-            if (!app.Kb.IsRgb) { btnColor.Enabled = false; presets.Enabled = false; }
+            if (!app.Enforcer.IsRgb) { btnColor.Enabled = false; presets.Enabled = false; }
             gLight.Controls.Add(chkEnforce);
             gLight.Controls.Add(Row(new Label { Text = "Check every", AutoSize = true, Margin = new Padding(0, 6, 0, 0) }, numInterval, new Label { Text = "seconds", AutoSize = true, Margin = new Padding(0, 6, 0, 0) }));
             root.Controls.Add(gLight.Parent);
@@ -100,7 +113,7 @@ namespace KeyLight
                 OnChanged();
             };
             gCal.Controls.Add(Row(new Label { Text = "Mid-tone curve (gamma)", AutoSize = true, Margin = new Padding(0, 6, 0, 0) }, numGamma, btnWhite, btnReset));
-            if (!app.Kb.IsRgb) gCal.Enabled = false;
+            if (!app.Enforcer.IsRgb) gCal.Enabled = false;
             root.Controls.Add(gCal.Parent);
 
             // Battery rule
@@ -121,7 +134,7 @@ namespace KeyLight
             gStat.Controls.Add(lblStatus);
             root.Controls.Add(gStat.Parent);
 
-            var btnHide = new Button { Text = "Hide to tray", AutoSize = true };
+            var btnHide = btnHideTray = new Button { Text = "Hide to tray", AutoSize = true };
             var btnExit = new Button { Text = "Exit KeyLight", AutoSize = true };
             btnHide.Click += delegate { Hide(); };
             btnExit.Click += delegate { app.Exit(); };

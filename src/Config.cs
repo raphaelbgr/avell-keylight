@@ -24,6 +24,7 @@ namespace KeyLight
         public Color Color = Color.White;
         public bool Enforce = true;                          // put the setting back if anything changes it
         public int EnforceIntervalSec = 2;
+        public bool FollowFnKeys = true;                     // keep Fn-key brightness changes (not "off")
 
         // Optional battery rule (off unless the user enables it)
         public bool BatteryRule = false;
@@ -76,6 +77,7 @@ namespace KeyLight
             c.Color = GetColor(kv, "Color", c.Color);
             c.Enforce = GetBool(kv, "Enforce", c.Enforce);
             c.EnforceIntervalSec = Clamp(GetInt(kv, "EnforceIntervalSec", c.EnforceIntervalSec), 1, 60);
+            c.FollowFnKeys = GetBool(kv, "FollowFnKeys", c.FollowFnKeys);
             c.BatteryRule = GetBool(kv, "BatteryRule", c.BatteryRule);
             c.BatteryTurnOff = GetBool(kv, "BatteryTurnOff", c.BatteryTurnOff);
             c.BatteryBrightness = Clamp(GetInt(kv, "BatteryBrightness", c.BatteryBrightness), 1, Keyboard.MaxBrightness);
@@ -103,6 +105,7 @@ namespace KeyLight
             sb.AppendLine("Color=" + ToHex(Color));
             sb.AppendLine("Enforce=" + Enforce);
             sb.AppendLine("EnforceIntervalSec=" + EnforceIntervalSec);
+            sb.AppendLine("FollowFnKeys=" + FollowFnKeys);
             sb.AppendLine("BatteryRule=" + BatteryRule);
             sb.AppendLine("BatteryTurnOff=" + BatteryTurnOff);
             sb.AppendLine("BatteryBrightness=" + BatteryBrightness);

@@ -1,5 +1,6 @@
 using System;
 using System.Management;
+using System.Threading;
 
 namespace KeyLight
 {
@@ -13,7 +14,9 @@ namespace KeyLight
         const ulong ReadFlag = 0x10000000000UL;
         const uint CallFailed = 0xFEFEFEFE;
 
-        readonly object gate = new object();
+        // The firmware rejects overlapping calls, so every caller - other threads and
+        // other KeyLight processes (tray + CLI) - takes this machine-wide lock first.
+        static readonly Mutex gate = new Mutex(false, @"Global\AvellKeyLight.EC");
         readonly ManagementObject wmi;
 
         public Ec()
@@ -30,17 +33,40 @@ namespace KeyLight
                 throw new InvalidOperationException("WMI class AcpiTest_MULong not found. This is not a Uniwill-based laptop, or the program is not running as administrator.");
         }
 
+        // Total calls that had to be retried (firmware busy), for diagnostics.
+        public static int Retries;
+
         uint Call(ulong data)
         {
-            lock (gate)
+            try
             {
-                ManagementBaseObject inParams = wmi.GetMethodParameters("GetSetULong");
-                inParams["Data"] = data;
-                ManagementBaseObject outParams = wmi.InvokeMethod("GetSetULong", inParams, null);
-                uint ret = Convert.ToUInt32(outParams["Return"]);
-                if (ret == CallFailed)
-                    throw new InvalidOperationException(string.Format("EC call failed (Data=0x{0:X})", data));
-                return ret;
+                if (!gate.WaitOne(10000))
+                    throw new InvalidOperationException("EC lock timeout");
+            }
+            catch (AbandonedMutexException)
+            {
+                // previous owner died; we own it now
+            }
+            try
+            {
+                // Still fails (0xFEFEFEFE) if the vendor service hits the firmware at the
+                // same moment, so retry briefly.
+                for (int attempt = 0; ; attempt++)
+                {
+                    ManagementBaseObject inParams = wmi.GetMethodParameters("GetSetULong");
+                    inParams["Data"] = data;
+                    ManagementBaseObject outParams = wmi.InvokeMethod("GetSetULong", inParams, null);
+                    uint ret = Convert.ToUInt32(outParams["Return"]);
+                    if (ret != CallFailed) return ret;
+                    if (attempt == 5)
+                        throw new InvalidOperationException(string.Format("EC call failed after {0} retries (Data=0x{1:X})", attempt, data));
+                    Interlocked.Increment(ref Retries);
+                    Thread.Sleep(25 * (attempt + 1));
+                }
+            }
+            finally
+            {
+                gate.ReleaseMutex();
             }
         }
 

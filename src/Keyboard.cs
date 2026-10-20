@@ -73,12 +73,18 @@ namespace KeyLight
         // full intensity, so trims change the mix (white, orange...) but never dim pure colors.
         public void Levels(Color c, out byte r, out byte g, out byte b)
         {
-            double fr = Math.Pow(c.R / 255.0, Gamma) * TrimRed / 100.0;
-            double fg = Math.Pow(c.G / 255.0, Gamma) * TrimGreen / 100.0;
-            double fb = Math.Pow(c.B / 255.0, Gamma) * TrimBlue / 100.0;
+            ComputeLevels(c, Gamma, TrimRed, TrimGreen, TrimBlue, IntensityPercent, out r, out g, out b);
+        }
+
+        public static void ComputeLevels(Color c, double gamma, int trimRed, int trimGreen, int trimBlue, int intensityPercent,
+            out byte r, out byte g, out byte b)
+        {
+            double fr = Math.Pow(c.R / 255.0, gamma) * trimRed / 100.0;
+            double fg = Math.Pow(c.G / 255.0, gamma) * trimGreen / 100.0;
+            double fb = Math.Pow(c.B / 255.0, gamma) * trimBlue / 100.0;
             double peak = Math.Max(fr, Math.Max(fg, fb));
-            double want = Math.Pow(Math.Max(c.R, Math.Max(c.G, c.B)) / 255.0, Gamma);
-            double scale = peak > 0 ? MaxColorLevel * want / peak * IntensityPercent / 100.0 : 0;
+            double want = Math.Pow(Math.Max(c.R, Math.Max(c.G, c.B)) / 255.0, gamma);
+            double scale = peak > 0 ? MaxColorLevel * want / peak * intensityPercent / 100.0 : 0;
             r = ToByte(fr * scale);
             g = ToByte(fg * scale);
             b = ToByte(fb * scale);
@@ -117,6 +123,13 @@ namespace KeyLight
 
         public void Apply(int brightness, Color color)
         {
+            Apply(brightness, color, Read());
+        }
+
+        // current = last known EC state; color registers that already hold the wanted
+        // levels are not rewritten (every EC call costs ~0.1-0.2 s)
+        public void Apply(int brightness, Color color, KbState current)
+        {
             if (brightness < 0) brightness = 0;
             if (brightness > MaxBrightness) brightness = MaxBrightness;
             // all-zero color triggers an EC "load defaults" special case, so treat black as off
@@ -126,10 +139,13 @@ namespace KeyLight
             {
                 byte r, g, b;
                 Levels(color, out r, out g, out b);
-                ec.Write(RegRed, r);
-                ec.Write(RegGreen, g);
-                ec.Write(RegBlue, b);
-                ec.Write(RegRgbMode, (byte)(ec.Read(RegRgbMode) | 0x20));
+                if (current.Red != r || current.Green != g || current.Blue != b)
+                {
+                    ec.Write(RegRed, r);
+                    ec.Write(RegGreen, g);
+                    ec.Write(RegBlue, b);
+                    ec.Write(RegRgbMode, (byte)(ec.Read(RegRgbMode) | 0x20));
+                }
             }
 
             byte status = ec.Read(RegStatus);

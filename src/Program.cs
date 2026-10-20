@@ -22,6 +22,7 @@ namespace KeyLight
   AvellKeyLight.exe autostart on|off     start with Windows
   AvellKeyLight.exe vendor fix|restore   neutralize / restore Control Center battery-off + idle timer
   AvellKeyLight.exe dump                 read-only dump of EC registers 0x0740-0x07FF
+  AvellKeyLight.exe selftest             end-to-end test of the window + keyboard (exit KeyLight first)
 
   --out <file>                           also write command output to a file";
 
@@ -29,6 +30,7 @@ namespace KeyLight
         static extern bool AttachConsole(int pid);
 
         static readonly StringBuilder output = new StringBuilder();
+        static string selfTestOut;
 
         [STAThread]
         static int Main(string[] args)
@@ -46,6 +48,7 @@ namespace KeyLight
             if (list.Count == 0) return RunTray(!tray);
 
             AttachConsole(-1);
+            selfTestOut = outFile == null ? null : outFile + ".report.txt";
             int rc;
             try
             {
@@ -98,6 +101,23 @@ namespace KeyLight
             {
                 Out(Usage);
                 return 0;
+            }
+            if (cmd == "selftest")
+            {
+                // end-to-end test of the real window + EC; KeyLight must not be running
+                bool created;
+                using (var mutex = new Mutex(true, @"Global\AvellKeyLight.Instance", out created))
+                {
+                    if (!created)
+                    {
+                        Out("selftest: exit the running KeyLight first");
+                        return 1;
+                    }
+                    string report = selfTestOut ?? Path.Combine(Log.Dir, "selftest.txt");
+                    int rc = SelfTest.Run(report, Path.ChangeExtension(report, ".png"));
+                    Out(File.ReadAllText(report));
+                    return rc;
+                }
             }
             if (cmd == "autostart" && a.Count == 2)
             {
